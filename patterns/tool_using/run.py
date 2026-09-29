@@ -7,4 +7,4 @@ result = app.invoke({
 })
 
 print("\n\nResult for Tool-Using Agent:")
-print(result)
+print(result.get("result", "No answer was produced."))
