@@ -17,6 +17,15 @@ def get_planner_workflow():
     return build_planner_graph()
 
 
+@st.cache_resource
+def get_supervisor_workflow():
+    # Import here so other demonstrations can still load if this backend
+    # has not been implemented or configured yet.
+    from patterns.supervisor_worker.graph import build_graph
+
+    return build_graph()
+
+
 def render_message(message):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -25,6 +34,8 @@ def render_message(message):
             st.caption(f"Arithmetic tool | `{message['expression']}`")
         elif message.get("route") == "general":
             st.caption("General answer")
+        elif message.get("route") == "supervisor_worker" and message.get("worker"):
+            st.caption(f"Supervisor routed this request to: {message['worker']}")
 
         plan = message.get("plan", [])
         if plan:
@@ -74,7 +85,7 @@ with st.sidebar:
     st.subheader("Demonstration")
     pattern = st.selectbox(
         "Choose an agentic pattern",
-        ["Tool-Using", "Planner-Executor"],
+        ["Tool-Using", "Planner-Executor", "Supervisor-Worker"],
         key="selected_pattern",
     )
 
@@ -113,6 +124,7 @@ if question := st.chat_input("Send a message"):
 
     with st.chat_message("assistant"):
         with st.spinner("Working on your request..."):
+            worker = ""
             try:
                 if pattern == "Planner-Executor":
                     result = get_planner_workflow().invoke({"task": question})
@@ -120,6 +132,20 @@ if question := st.chat_input("Send a message"):
                     plan = result.get("plan", [])
                     route = "planner"
                     expression = ""
+
+                elif pattern == "Supervisor-Worker":
+                    result = get_supervisor_workflow().invoke({"query": question})
+                    answer = str(
+                        result.get("result")
+                        or result.get("leave_balance")
+                        or result.get("output")
+                        or "No result was produced."
+                    )
+                    worker = result.get("worker", "")
+                    plan = []
+                    route = "supervisor_worker"
+                    expression = ""
+
                 else:
                     result = get_tool_workflow().invoke({"question": question})
                     answer = str(
@@ -128,6 +154,7 @@ if question := st.chat_input("Send a message"):
                     plan = []
                     route = result.get("route", "general")
                     expression = result.get("expression", "")
+
             except Exception as error:
                 answer = f"Request failed: {error}"
                 plan = []
@@ -140,6 +167,8 @@ if question := st.chat_input("Send a message"):
             st.caption(f"Arithmetic tool | `{expression}`")
         elif route == "general":
             st.caption("General answer")
+        elif route == "supervisor_worker" and worker:
+            st.caption(f"Supervisor routed this request to: {worker}")
 
         if plan:
             st.markdown("**Plan**")
@@ -153,5 +182,6 @@ if question := st.chat_input("Send a message"):
             "route": route,
             "expression": expression,
             "plan": plan,
+            "worker": worker,
         }
     )
